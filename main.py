@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+
+
 # Iperparametri microscopici per girare veloce su CPU / Mac Metal (MPS)
 batch_size = 32
 block_size = 64     # Lunghezza massima del contesto
