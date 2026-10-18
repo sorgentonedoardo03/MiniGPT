@@ -5,22 +5,22 @@ from torch.nn import functional as F
 
 
 # Iperparametri microscopici per girare veloce su CPU / Mac Metal (MPS)
+# nel readme ho scritto dei parametri per un training più "light" a livello computazionale
 batch_size = 32
-block_size = 64     # Lunghezza massima del contesto
-max_iters = 1500
-eval_interval = 300
-learning_rate = 1e-3
+block_size = 256     # Lunghezza massima del contesto
+max_iters = 3500
+eval_interval = 500
+learning_rate = 3e-3
 device = 'mps' if torch.backends.mps.is_available() else ('cuda' if torch.cuda.is_available() else 'cpu')
-eval_iters = 100
-n_embd = 128
-n_head = 4
-n_layer = 4
+eval_iters = 50
+n_embd = 384
+n_head = 6
+n_layer = 6
 dropout = 0.1
 
 torch.manual_seed(1337)
 
-# 1. Dataset giocattolo: un file di testo (es. shakespeare.txt o qualunque testo)
-# Per testare subito puoi usare una stringa lunga o scaricare tinyshakespeare
+# 1. Dataset per training
 with open('input.txt', 'r', encoding='utf-8') as f:
     text = f.read()
 

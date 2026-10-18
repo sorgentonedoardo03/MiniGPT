@@ -1,10 +1,88 @@
 # LLMs per tutti
-Lo scopo di questo Readme è far capire informalmente a chiunque il funzionamento di base del progetto didattico, spiegando il codice che ho scritto nel main.py e i concetti alla base. 
+Lo scopo di questo Readme è far capire informalmente a chiunque il funzionamento di base del progetto didattico, spiegando il codice che ho scritto nel main.py e i concetti alla base. Faremo prima una overview teorica, per poi passare a spiegare il codice del progetto.  
 
 # Introduzione - Breve Overview sugli LLM
 Cosa accade da quando scriviamo un prompt a quando riceviamo il nostro output del modello? Inizia tutto dalla tokenizzazione: il nostro prompt è una stringa che viene convertita in una sequenza di token numerici (ID interi). Più avanti spieghiamo meglio questo procedimento, ora diamo una introduzione generica.
-Quindi, questa sequenza di token viene trasformata in una matrice di vettori densi attraverso lo strato di Embedding. Se il nostro prompt è composto da N caratteri (o token) e abbiamo scelto una dimensione di spazio nascosto pari a n_embd, la nostra frase diventa a tutti gli effetti una matrice di ingresso X con dimensioni:
 
+Quindi, questa sequenza di token viene trasformata in una matrice di vettori, l'Embedding. Ogni token viene trasformato in un vettore di embedding, per cui la frase(il prompt) diventa una matrice composta da vettori di embedding.
+Un embedding contiene numeri decimali (vettori). Ciascuno di questi numeri rappresenta una specifica caratteristica o sfumatura astratta del significato di quel token, decisa autonomamente dal modello durante l'addestramento.
+Anche se noi umani non possiamo leggere direttamente cosa significa ogni singola coordinata, idealmente potrebbero rappresentare concetti come:
+
+
+• È un oggetto animato o inanimato?
+
+
+• Ha a che fare con il tempo (passato/presente)?
+
+
+• È una parola formale o informale?
+
+
+• Ha una connotazione positiva o negativa?
+
+
+Mettendo insieme centinaia o migliaia di queste sfumature (numeri), il modello ottiene un'istantanea precisissima del significato del token. Quindi per noi non hanno alcun significato, non sappiamo tradurre il significato di quei numeri, perchè il modello li ha "autoregolati" durante il suo training, la fase in cui il modello impara. 
+
+Se il nostro prompt è composto da N caratteri (o token) e abbiamo scelto una dimensione di spazio nascosto(cioè quanti di quei numeri decimali scegliamo) pari a n_embd, la nostra frase diventa a tutti gli effetti una matrice di ingresso X con dimensioni:
+
+
+$$X\rarr N \times n\_embd$$
+
+
+Questa matrice X contiene tutta l'informazione iniziale delle nostre parole, ma è ancora statica: i vettori non si sono ancora parlati tra di loro. Per iniziare a calcolare il contesto, la matrice X viene clonata in tre copie identiche e sparata in parallelo contro le tre famose matrici fisse del blocco di Attention: $W_{Q},W_{K}, W_{V} $. Tutte e tre queste matrici sono griglie quadrate grandi [n_embd × n_embd].
+
+Attraverso tre moltiplicazioni matriciali separate, otteniamo tre nuove matrici fondamentali, ognuna delle quali mantiene la forma $[N \times \text{n\_embd}]$.
+
+1. $Q = X \times W_Q$ (La matrice delle Query)
+2. $K = X \times W_K$ (La matrice delle Key)
+3. $V = X \times W_V$ (La matrice delle Value)
+
+A questo punto avviene il calcolo dell'Attention. Il computer prende la matrice Q e la moltiplica per la matrice delle Key trasposta $K^{T}$, che ha dimensioni $[\text{n\_embd} \times N]$. Il risultato di questo prodotto riga per colonna è una matrice quadrata che mappa le relazioni tra tutte le parole della frase, chiamata Attention Matrix:
+
+$$ Attention \space Matrix = Softmax(\frac{Q \times K^T}{\sqrt{d_k} }) \rarr [N \times N]$$
+
+I numeri all'interno di questa griglia vengono divisi per un fattore di scala e passati dentro una funzione Softmax riga per riga, trasformandoli in percentuali di affinità che sommano a 1. Questa matrice ci dice concretamente quanto ogni parola debba pesare e "considerare" le altre all'interno del contesto.
+
+Subito dopo, questa matrice di voti $N \times N$ viene moltiplicata per la matrice V. Il risultato di questo prodotto ci riporta  alle dimensioni di partenza:
+
+
+$\text{Output Attention}=\text{Attention Matrix}\times V\rightarrow [N\times \text{n\_embd}]$
+
+
+In questa nuova matrice, l'identità di ogni parola è stata "contaminata" dal significato delle parole circostanti.
+
+I dati non si fermano qui. Questa matrice $[N \times \text{n\_embd}]$ entra dentro il blocco Feed-Forward Network (FFN) per subire un'elaborazione logica profonda. Qui incontra altre due matrici in serie che fanno un gioco di "imbuto" geometrico: la prima matrice spinge e allarga lo spazio vettoriale (di solito quattro volte più grande, es. da 512 a 2048), i numeri subiscono una distorsione non-lineare attraverso la funzione di attivazione GELU, e la seconda matrice schiaccia nuovamente il vettore riportandolo alla dimensione originale n_embd. Quindi nella prima operazione avremo un tensore allargato, 4 volte più grande, poi la seconda moltiplicazione lo riporta alle dimensioni originali.
+
+
+Siamo alla fine del viaggio (fase di Inferenza). Al modello ora interessa solo prevedere il token successivo, quindi effettua un'operazione di slicing ed estrae esclusivamente l'ultima riga della matrice, ovvero il vettore lungo n_embd associato all'ultimo carattere del prompt, che ormai ha accumulato lo storico e il significato di tutta la frase.
+Questo singolo vettore riga viene "sparato" contro **l'ultimissima matrice della rete, la Language Model Head (LM Head)**, che ha dimensioni 
+[n_embd × dictionary_size].
+
+La moltiplicazione genera quindi un vettore riga finale lungo quanto tutto il nostro dizionario (es. 256 indici per i caratteri UTF-8):
+
+$\text{Logits}=\text{Vettore\ Ultima\ Parola}\times \text{LM\ Head}\rightarrow [1\times \text{dictionary\_size}]
+$
+
+
+I 256 numeri ottenuti passano per un'ultima Softmax che assegna a ogni carattere una probabilità. Il computer prende l'indice con il valore più alto (o ne campiona uno in base alle percentuali), scopre a quale carattere/parola corrisponde e tira fuori l'output.
+
+Per generare l'intera risposta, il modello funziona in modo autoregressivo: prende l'ultimo token che ha appena predetto, lo attacca alla fine della frase iniziale e fa rientrare tutto il blocco da capo nella rete. Questo ciclo si ripete continuamente, un token alla volta, finché il Transformer non decide di fermarsi o non raggiunge la lunghezza massima stabilita.
+
+**TRAINING**
+
+Tutto il procedimento descritto sopra funziona perfettamente solo se le matrici della rete $W_{Q}, W_{K}, W_{V}$, le matrici dell'FFN e la LM Head) contengono i numeri "giusti". Ma all'inizio del progetto, nel Giorno 0, tutte queste matrici sono riempite di numeri microscopici messi completamente a caso. Se inseriamo un prompt, il modello sputerà fuori caratteri casuali e senza senso.
+La fase di Training (Addestramento) serve proprio a sintonizzare questi milioni di numeri per insegnare al Transformer la struttura della lingua. Si tratta di un gigantesco ciclo iterativo programmato per girare un numero fisso di volte (max_iters).
+
+
+1. Il **Forward Pass e il calcolo della Loss**:
+Il computer non estrae una sola frase dal nostro dataset di testo, ma raccoglie un gruppo di frasi insieme (il batch_size) tagliate a una lunghezza massima fissa (il block_size). Questo blocco di dati viene sparato nella rete. Il Transformer esegue tutte le moltiplicazioni matriciali viste nella pipeline e sputa fuori le sue scommesse per ogni posizione della frase.
+Immediatamente dopo, il codice confronta la scommessa fatta dal modello con il carattere reale che si trova subito dopo nel nostro testo di addestramento. Da questo confronto viene calcolato un singolo numero che rappresenta la mazzata di errore commessa dalla rete: la Loss Function (funzione di errore, solitamente calcolata tramite la Cross-Entropy Loss). Se il modello indovina la Loss è vicina a zero; più la scommessa è stupida e lontana dal bersaglio, più la Loss sale.
+
+2. **La Backpropagation (Il viaggio di ritorno)**: una volta ottenuto il valore numerico della Loss, il computer blocca il flusso e inverte la marcia, avviando la Backpropagation (propagazione all'indietro dell'errore).
+Partendo dall'ultimo strato e risalendo verso l'inizio della rete, l'algoritmo applica la regola della catena (Chain Rule) dell'analisi matematica. Per ogni singola matrice fissa, calcola la derivata parziale della Loss rispetto a ogni singolo peso w contenuto nella griglia
+Questo calcolo risponde a una domanda chirurgica: "Se io modifico di un millimetro questo specifico numero w dentro questa matrice, la Loss totale salirà o scenderà?". L'insieme di tutte queste derivate parziali prime calcolate per l'intera matrice forma il vettore Gradiente. Il gradiente è la bussola del modello: indica la direzione della pendenza dell'errore e quanto quel singolo peso sia "colpevole" dello sbaglio finale.
+
+3. **L'Aggiornamento dei Pesi (Optimization)**: trovata la direzione grazie al gradiente, entra in gioco l'ottimizzatore (es. AdamW). Per evitare che la rete faccia salti troppo violenti che distruggerebbero l'equilibrio dei calcoli, interviene il learning_rate, che agisce come una vera e propria "valvola" per frenare la correzione.Se il gradiente è positivo significa che il valore del peso stava facendo aumentare l'errore, quindi il segno meno lo riduce. Se il gradiente è negativo, meno per meno fa più, e il valore del peso aumenta.
 # Tokenizzazione 
  Essendo un progetto didattico non uso la tokenizzazione BPE(Byte Pair Encoding), ma uso  semplicemente la tokenizzazione a livello di carattere. La BPE è molto efficiente perchè è un ibrido dell'approccio per parola e per carattere: cerca nei testi di addestramento  che generano il vocabolario le coppie di byte o caratteri più frequenti, ad esempio prima "es", poi vede che "est" è più frequente e unisce i pezzi: il token generato nel dizionario sarà associato a quel gruppo di lettere, es. token:756. Nella tokenizzazione per parola quando viene passata una parola sconosciuta, il tokenizzatore può andare in tilt o associare un nuovo token fisso (come < UNK >) per ogni parola sconosciuta, perdendo informazione quindi. Invece il problema della tokenizzazione per carattere è che si formano matrici con troppe righe (sequenze lunghe): usando UTF-8, avremo un vocabolario base di 256 ID, ma siccome ogni singolo carattere è un token indipendente, una frase genererà una matrice con un numero immenso di righe...
 
@@ -50,5 +128,56 @@ Serve a scegliere automaticamente l'hardware più potente disponibile sul comput
 
 Questo parametro è molto importante perchè deciderà la dimensione delle matrici dei pesi. Le matrici $W_q,W_k,W_v$  . Infatti ciascuna di queste avrà dimensione $n\_embd \times n\_embd$. 
 
+
+
+## ```n_head````
+Quando progetti un Transformer, tu devi scegliere due numeri obbligatori per definire la dimensione della rete:
+1. n_embd: quanti numeri totali compongono una parola (es. 64).
+2. n_head: in quante parti vuoi dividere questi numeri (es. 4).
+Da questi due numeri che hai scelto tu, il computer calcola automaticamente un terzo valore fisso, che nel codice si chiama head_size (la dimensione di una singola testa):
+$$\text{head\_size}=\frac{\text{n\_embd}}{\text{n\_head}}=\frac{64}{4}=16$$
+n_head definisce il numero di 'teste' di attenzione. Serve a dividere il vettore di embedding in più parti uguali, permettendo al modello di analizzare le relazioni tra le parole da più punti di vista contemporaneamente (ad esempio, analizzando la grammatica con una testa e il significato logico con un'altra) nello stesso istante. Questa suddivisione viene effettuata solo per il calcolo dell'attention. Infatti prima di entrare nel FFN viene ricomposta la tabella originale: il computer poi prende queste 4 matrici e le incolla una di fianco all'altra, in orizzontale, ricostruendo la tabella originaria.Solo dopo passerà nella FFN.
+
+## ```n_layer````
+L'n_layer (numero di livelli o strati) indica quante volte l'intera macchina che abbiamo appena descritto viene replicata e messa in fila, una dopo l'altra.
+Se nel tuo progetto imposti n_layer = 6, significa che la tua frase non passa dentro un solo blocco di Attention e Feed-Forward, ma attraversa 6 blocchi identici messi in serie.
+Ogni layer ha le sue matrici addestrate indipendentemente dagli altri layer. 
+
+       [ Prompt Iniziale ]
+                │
+                ▼
+      ┌───────────────────┐
+      │     LAYER 1       │ ──► (Attention + FFN con i propri pesi)
+      └───────────────────┘
+                │ [N x 64]
+                ▼
+      ┌───────────────────┐
+      │     LAYER 2       │ ──► (Attention + FFN con altri pesi)
+      └───────────────────┘
+                │ [N x 64]
+                ▼
+               ... (fino a n_layer)
+                │ [N x 64]
+                ▼
+      ┌───────────────────┐
+      │  LM HEAD (FINALE) │ ──► (Sceglie la parola dal dizionario)
+      └───────────────────┘
+
+La cosa fondamentale da capire è che questi blocchi (i Layer) sono disposti in verticale (in serie), come i piani di una fabbrica.
+1. La tua frase entra nel Layer 1.
+2. Dentro il Layer 1 fa tutto il giro che abbiamo studiato: entra nell'Attention (si divide in n_head, si calcolano Q, K, V, si ricompone) e poi entra nel Feed-Forward (allargamento e riduzione).
+3. L'output che esce dal Layer 1 ha ancora dimensioni [N × n_embd] (es. [4 × 64]).
+4. Questo output diventa direttamente l'input del Layer 2.
+5. Il Layer 2 rifà esattamente le stesse identiche operazioni, ma usando le sue matrici di pesi personali, e passa il risultato al Layer 3.
+Questo telefono senza fili matematico continua fino all'ultimo strato (n_layer). Solo quando i vettori escono dall'ultimissimo Layer, il codice estrae l'ultima riga e la manda alla LM Head per scegliere la parola dal dizionario.
+
+
+## ``` dropout ```
+l dropout è una tecnica di regolarizzazione che serve esclusivamente durante la fase di training per impedire al modello di imparare il testo a memoria (Overfitting).
+In parole molto povere: ad ogni iterazione di addestramento, il computer "spegne" a caso una percentuale di neuroni, costringendo la rete a trovare strade alternative per indovinare la parola successiva.
+Noi qui abbiamo impostato dropout = 0.1 (ovvero il 10%):
+• Durante il Forward Pass, PyTorch prende le tue matrici o i tuoi vettori e, in modo del tutto casuale, sostituisce il 10% dei numeri presenti con uno zero assoluto (0.0).
+• Al passo (iterazione) successivo, riattiva quei neuroni e ne spegne un altro 10% pescato a caso.
+Senza Dropout la rete tende ad affidarsi sempre agli stessi identici accoppiamenti di numeri per memorizzare le frasi del dataset. Se provi a usarla fuori dall'addestramento, basta una lettera diversa per mandarla in crisi.
 
 
