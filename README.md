@@ -26,7 +26,7 @@ Mettendo insieme centinaia o migliaia di queste sfumature (numeri), il modello o
 Se il nostro prompt è composto da N caratteri (o token) e abbiamo scelto una dimensione di spazio nascosto(cioè quanti di quei numeri decimali scegliamo) pari a n_embd, la nostra frase diventa a tutti gli effetti una matrice di ingresso X con dimensioni:
 
 
-$$X\rarr N \times n\_embd$$
+$$X \rightarrow N \times n\_{\text{embd}}$$
 
 
 Questa matrice X contiene tutta l'informazione iniziale delle nostre parole, ma è ancora statica: i vettori non si sono ancora parlati tra di loro. Per iniziare a calcolare il contesto, la matrice X viene clonata in tre copie identiche e sparata in parallelo contro le tre famose matrici fisse del blocco di Attention: $W_{Q},W_{K}, W_{V} $. Tutte e tre queste matrici sono griglie quadrate grandi [n_embd × n_embd].
@@ -37,21 +37,21 @@ Attraverso tre moltiplicazioni matriciali separate, otteniamo tre nuove matrici 
 2. $K = X \times W_K$ (La matrice delle Key)
 3. $V = X \times W_V$ (La matrice delle Value)
 
-A questo punto avviene il calcolo dell'Attention. Il computer prende la matrice Q e la moltiplica per la matrice delle Key trasposta $K^{T}$, che ha dimensioni $[\text{n\_embd} \times N]$. Il risultato di questo prodotto riga per colonna è una matrice quadrata che mappa le relazioni tra tutte le parole della frase, chiamata Attention Matrix:
+A questo punto avviene il calcolo dell'Attention. Il computer prende la matrice Q e la moltiplica per la matrice delle Key trasposta $K^{T}$, che ha dimensioni $[n\_\text{embd} \times N]$. Il risultato di questo prodotto riga per colonna è una matrice quadrata che mappa le relazioni tra tutte le parole della frase, chiamata Attention Matrix:
 
-$$ Attention \space Matrix = Softmax(\frac{Q \times K^T}{\sqrt{d_k} }) \rarr [N \times N]$$
+$$ Attention \space Matrix = Softmax(\frac{Q \times K^T}{\sqrt{d_k} }) \rightarrow [N \times N]$$
 
 I numeri all'interno di questa griglia vengono divisi per un fattore di scala e passati dentro una funzione Softmax riga per riga, trasformandoli in percentuali di affinità che sommano a 1. Questa matrice ci dice concretamente quanto ogni parola debba pesare e "considerare" le altre all'interno del contesto.
 
 Subito dopo, questa matrice di voti $N \times N$ viene moltiplicata per la matrice V. Il risultato di questo prodotto ci riporta  alle dimensioni di partenza:
 
 
-$\text{Output Attention}=\text{Attention Matrix}\times V\rightarrow [N\times \text{n\_embd}]$
+$\text{Output Attention}=\text{Attention Matrix}\times V\rightarrow [N\times n\_\text{embd}]$
 
 
 In questa nuova matrice, l'identità di ogni parola è stata "contaminata" dal significato delle parole circostanti.
 
-I dati non si fermano qui. Questa matrice $[N \times \text{n\_embd}]$ entra dentro il blocco Feed-Forward Network (FFN) per subire un'elaborazione logica profonda. Qui incontra altre due matrici in serie che fanno un gioco di "imbuto" geometrico: la prima matrice spinge e allarga lo spazio vettoriale (di solito quattro volte più grande, es. da 512 a 2048), i numeri subiscono una distorsione non-lineare attraverso la funzione di attivazione GELU, e la seconda matrice schiaccia nuovamente il vettore riportandolo alla dimensione originale n_embd. Quindi nella prima operazione avremo un tensore allargato, 4 volte più grande, poi la seconda moltiplicazione lo riporta alle dimensioni originali.
+I dati non si fermano qui. Questa matrice $[N \times n\_\text{embd}]$ entra dentro il blocco Feed-Forward Network (FFN) per subire un'elaborazione logica profonda. Qui incontra altre due matrici in serie che fanno un gioco di "imbuto" geometrico: la prima matrice spinge e allarga lo spazio vettoriale (di solito quattro volte più grande, es. da 512 a 2048), i numeri subiscono una distorsione non-lineare attraverso la funzione di attivazione GELU, e la seconda matrice schiaccia nuovamente il vettore riportandolo alla dimensione originale n_embd. Quindi nella prima operazione avremo un tensore allargato, 4 volte più grande, poi la seconda moltiplicazione lo riporta alle dimensioni originali.
 
 
 Siamo alla fine del viaggio (fase di Inferenza). Al modello ora interessa solo prevedere il token successivo, quindi effettua un'operazione di slicing ed estrae esclusivamente l'ultima riga della matrice, ovvero il vettore lungo n_embd associato all'ultimo carattere del prompt, che ormai ha accumulato lo storico e il significato di tutta la frase.
@@ -60,8 +60,7 @@ Questo singolo vettore riga viene "sparato" contro **l'ultimissima matrice della
 
 La moltiplicazione genera quindi un vettore riga finale lungo quanto tutto il nostro dizionario (es. 256 indici per i caratteri UTF-8):
 
-$\text{Logits}=\text{Vettore\ Ultima\ Parola}\times \text{LM\ Head}\rightarrow [1\times \text{dictionary\_size}]
-$
+$$\text{Logits} = \text{Vettore Ultima Parola} \times \text{LM Head} \rightarrow [1 \times \text{dictionary}_{\text{size}}]$$
 
 
 I 256 numeri ottenuti passano per un'ultima Softmax che assegna a ogni carattere una probabilità. Il computer prende l'indice con il valore più alto (o ne campiona uno in base alle percentuali), scopre a quale carattere/parola corrisponde e tira fuori l'output.
@@ -130,12 +129,14 @@ Questo parametro è molto importante perchè deciderà la dimensione delle matri
 
 
 
-## ```n_head````
+## ```n_head```
 Quando progetti un Transformer, tu devi scegliere due numeri obbligatori per definire la dimensione della rete:
 1. n_embd: quanti numeri totali compongono una parola (es. 64).
 2. n_head: in quante parti vuoi dividere questi numeri (es. 4).
 Da questi due numeri che hai scelto tu, il computer calcola automaticamente un terzo valore fisso, che nel codice si chiama head_size (la dimensione di una singola testa):
-$$\text{head\_size}=\frac{\text{n\_embd}}{\text{n\_head}}=\frac{64}{4}=16$$
+
+$$\text{head}_{\text{size}} = \frac{n_{\text{embd}}}{n_{\text{head}}} = \frac{64}{4} = 16$$
+
 n_head definisce il numero di 'teste' di attenzione. Serve a dividere il vettore di embedding in più parti uguali, permettendo al modello di analizzare le relazioni tra le parole da più punti di vista contemporaneamente (ad esempio, analizzando la grammatica con una testa e il significato logico con un'altra) nello stesso istante. Questa suddivisione viene effettuata solo per il calcolo dell'attention. Infatti prima di entrare nel FFN viene ricomposta la tabella originale: il computer poi prende queste 4 matrici e le incolla una di fianco all'altra, in orizzontale, ricostruendo la tabella originaria.Solo dopo passerà nella FFN.
 
 ## ```n_layer````
