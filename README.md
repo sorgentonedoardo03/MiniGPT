@@ -139,7 +139,7 @@ $$\text{head}_{\text{size}} = \frac{n_{\text{embd}}}{n_{\text{head}}} = \frac{64
 
 n_head definisce il numero di 'teste' di attenzione. Serve a dividere il vettore di embedding in più parti uguali, permettendo al modello di analizzare le relazioni tra le parole da più punti di vista contemporaneamente (ad esempio, analizzando la grammatica con una testa e il significato logico con un'altra) nello stesso istante. Questa suddivisione viene effettuata solo per il calcolo dell'attention. Infatti prima di entrare nel FFN viene ricomposta la tabella originale: il computer poi prende queste 4 matrici e le incolla una di fianco all'altra, in orizzontale, ricostruendo la tabella originaria.Solo dopo passerà nella FFN.
 
-## ```n_layer````
+## ```n_layer```
 L'n_layer (numero di livelli o strati) indica quante volte l'intera macchina che abbiamo appena descritto viene replicata e messa in fila, una dopo l'altra.
 Se nel tuo progetto imposti n_layer = 6, significa che la tua frase non passa dentro un solo blocco di Attention e Feed-Forward, ma attraversa 6 blocchi identici messi in serie.
 Ogni layer ha le sue matrici addestrate indipendentemente dagli altri layer. 
