@@ -31,7 +31,7 @@ $$X\rarr N \times n\_embd$$
 
 Questa matrice X contiene tutta l'informazione iniziale delle nostre parole, ma è ancora statica: i vettori non si sono ancora parlati tra di loro. Per iniziare a calcolare il contesto, la matrice X viene clonata in tre copie identiche e sparata in parallelo contro le tre famose matrici fisse del blocco di Attention: $W_{Q},W_{K}, W_{V} $. Tutte e tre queste matrici sono griglie quadrate grandi [n_embd × n_embd].
 
-Attraverso tre moltiplicazioni matriciali separate, otteniamo tre nuove matrici fondamentali, ognuna delle quali mantiene la forma $[N \times \text{n\_embd}]$.
+Attraverso tre moltiplicazioni matriciali separate, otteniamo tre nuove matrici fondamentali, ognuna delle quali mantiene la forma $[N \times n\_{embd}]$.
 
 1. $Q = X \times W_Q$ (La matrice delle Query)
 2. $K = X \times W_K$ (La matrice delle Key)
